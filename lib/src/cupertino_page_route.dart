@@ -670,23 +670,26 @@ class _CupertinoBackGestureDetectorState<T>
 
   void _handleDragUpdate(DragUpdateDetails details) {
     assert(mounted);
-    // assert(_backGestureController != null);
-
-    if (_willPopCallback != null &&
-        details.globalPosition.dx > context.size!.width * _kMaxSwipeDistance) {
-      _willPopCallback!();
-      _handleDragCancel();
-    }
-
     _backGestureController?.dragUpdate(
-        _convertToLogical(details.primaryDelta! / context.size!.width));
+      _convertToLogical(
+        details.primaryDelta! / context.size!.width,
+      ),
+    );
   }
 
   void _handleDragEnd(DragEndDetails details) {
     assert(mounted);
     // assert(_backGestureController != null);
-    _backGestureController?.dragEnd(_convertToLogical(
-        details.velocity.pixelsPerSecond.dx / context.size!.width));
+    final velocity = _convertToLogical(
+      details.velocity.pixelsPerSecond.dx / context.size!.width,
+    );
+
+    _backGestureController?.dragEnd(velocity);
+
+    // Call the willPopCallback if we should pop the route.
+    if (_backGestureController?.shouldForward(velocity) == false) {
+      _willPopCallback?.call();
+    }
 
     _backGestureController = null;
     _willPopCallback = null;
@@ -768,6 +771,17 @@ class _CupertinoBackGestureController<T> {
   final AnimationController controller;
   final NavigatorState navigator;
 
+  /// Determines whether the gesture should complete the route pop.
+  /// If the gesture is not yet complete, this should return false.
+  /// If the gesture is complete, this should return true.
+  bool shouldForward(double velocity) {
+    if (velocity.abs() >= _kMinFlingVelocity) {
+      return velocity <= 0;
+    } else {
+      return controller.value > 0.5;
+    }
+  }
+
   /// The drag gesture has changed by [fractionalDelta]. The total range of the
   /// drag should be 0.0 to 1.0.
   void dragUpdate(double delta) {
@@ -784,29 +798,29 @@ class _CupertinoBackGestureController<T> {
     // This curve has been determined through rigorously eyeballing native iOS
     // animations.
     const Curve animationCurve = Curves.fastLinearToSlowEaseIn;
-    final bool animateForward;
+
+    // If the velocity is in the same direction as the animation, then we
+    // animate forward. Otherwise, we animate backwards.
+    int lerp(num? a, num? b, double t) {
+      return lerpDouble(a, b, t)!.round();
+    }
 
     // If the user releases the page before mid screen with sufficient velocity,
     // or after mid screen, we should animate the page out. Otherwise, the page
     // should be animated back in.
-    if (velocity.abs() >= _kMinFlingVelocity)
-      animateForward = velocity <= 0;
-    else
-      animateForward = controller.value > 0.5;
-
-    if (animateForward) {
+    if (shouldForward(velocity)) {
       // The closer the panel is to dismissing, the shorter the animation is.
       // We want to cap the animation time, but we want to use a linear curve
       // to determine it.
       final int droppedPageForwardAnimationTime = min(
-        lerpDouble(
-                _kMaxDroppedSwipePageForwardAnimationTime, 0, controller.value)!
-            .floor(),
+        lerp(_kMaxDroppedSwipePageForwardAnimationTime, 0, controller.value),
         _kMaxPageBackAnimationTime,
       );
-      controller.animateTo(1.0,
+      controller.animateTo(
+        1.0,
           duration: Duration(milliseconds: droppedPageForwardAnimationTime),
-          curve: animationCurve);
+        curve: animationCurve,
+      );
     } else {
       // This route is destined to pop at this point. Reuse navigator's pop.
       navigator.pop();
@@ -814,12 +828,16 @@ class _CupertinoBackGestureController<T> {
       // The popping may have finished inline if already at the target destination.
       if (controller.isAnimating) {
         // Otherwise, use a custom popping animation duration and curve.
-        final int droppedPageBackAnimationTime = lerpDouble(
-                0, _kMaxDroppedSwipePageForwardAnimationTime, controller.value)!
-            .floor();
-        controller.animateBack(0.0,
+        final droppedPageBackAnimationTime = lerp(
+          0,
+          _kMaxDroppedSwipePageForwardAnimationTime,
+          controller.value,
+        );
+        controller.animateBack(
+          0.0,
             duration: Duration(milliseconds: droppedPageBackAnimationTime),
-            curve: animationCurve);
+          curve: animationCurve,
+        );
       }
     }
 
