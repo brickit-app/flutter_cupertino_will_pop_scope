@@ -1,5 +1,10 @@
+## [1.2.2]
+- Add support for Flutter 3.10 & Dart 3.0
+- Switch the git organization base due to renaming
+
 ## [1.2.1]
 - Merged with latest version of Flutter's `cupertino_page_route.dart`.
+
 ## [1.2.0]
 - [BREAKING] Renamed `ConditionalWillPopScope`'s `shouldAddCallbacks` to `shouldAddCallback`.
 - Changed all properties of `ConditionalWillPopScope` to be required.
